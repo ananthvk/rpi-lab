@@ -1,0 +1,112 @@
+- name: Base setup
+  hosts: myhosts
+  tasks:
+    - name: Ping my hosts
+      ansible.builtin.ping:
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+      become: true
+
+    - name: Upgrade packages
+      ansible.builtin.apt:
+        name: "*"
+        state: latest
+      become: true
+
+    - name: Install the package "unattended-upgrades" for automatic security upgrades
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: present
+      become: true
+
+    - name: Pre-seed debconf selection to enable auto upgrades
+      ansible.builtin.debconf:
+        name: unattended-upgrades
+        question: unattended-upgrades/enable_auto_updates
+        value: "true"
+        vtype: boolean
+      become: true
+
+    - name: Run dpkg-reconfigure non-interactively
+      ansible.builtin.command:
+        cmd: dpkg-reconfigure -f noninteractive unattended-upgrades
+      become: true
+
+    - name: "Enable systemd lingering for user {{ main_user }}"
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - enable-linger
+          - "{{ main_user }}"
+      become: true
+      args:
+        creates: "/var/lib/systemd/linger/{{ main_user }}"
+
+    - name: Add parameters to cmdline.txt to enable docker memory tracking, and usb storage quirks for ssd enclosure
+      become: true
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/cmdline.txt
+        regexp: '^(?!.*usb-storage\.quirks=)(.*)$'
+        line: '\1 usb-storage.quirks=152d:0578:u cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1'
+        backrefs: true
+
+    - name: Enable persistent journal - create directory
+      become: true
+      ansible.builtin.file:
+        path: /var/log/journal
+        state: directory
+        mode: '0755'
+
+    - name: Enable persistent journal - create config
+      become: true
+      community.general.ini_file:
+        path: /etc/systemd/journald.conf.d/50-storage.conf
+        section: Journal
+        option: Storage
+        value: persistent
+        mode: '0644'
+
+    - name: Disable unwanted services and sockets
+      become: true
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - cloud-config.service
+        - avahi-daemon.service
+        - avahi-daemon.socket
+        - bluetooth.service
+
+    - name: Restart systemd-journald
+      become: true
+      ansible.builtin.systemd_service:
+        name: systemd-journald
+        state: restarted
+
+    - name: Install a few common packages
+      ansible.builtin.apt:
+        name:
+          - neovim
+          - ufw
+          - htop
+          - smartmontools
+          - ca-certificates
+          - curl
+        state: present
+      become: true
+    
+    - name: Restart machine
+      become: true
+      ansible.builtin.reboot:
+        msg: "Rebooting machine through ansible"
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        reboot_timeout: 600
+        test_command: uptime
+
+    - name: Print message
+      ansible.builtin.debug:
+        msg: Finished initial setup

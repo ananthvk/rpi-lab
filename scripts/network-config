@@ -1,0 +1,14 @@
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      optional: true
+  wifis:
+    wlan0:
+      dhcp4: true
+      regulatory-domain: "{{RPI_WIFI_COUNTRY}}"
+      access-points:
+        "{{RPI_WIFI_AP}}":
+          password: "{{RPI_WIFI_PASSWORD}}"
+      optional: true

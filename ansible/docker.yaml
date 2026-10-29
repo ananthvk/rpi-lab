@@ -1,0 +1,69 @@
+- name: Docker setup
+  gather_facts: true
+  hosts: myhosts
+  tasks:
+    - name: Create apt keyrings directory
+      become: true
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker GPG Key
+      become: true
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker APT repository (DEB822 format)
+      become: true
+      ansible.builtin.deb822_repository:
+        install_python_debian: true
+        name: docker
+        types: [deb]
+        uris: [https://download.docker.com/linux/debian]
+        suites: ["{{ ansible_facts['distribution_release'] }}"]
+        components: [stable]
+        architectures: ["{{ ansible_facts['architecture'] }}"]
+        signed_by: /etc/apt/keyrings/docker.asc
+
+    - name: Update apt cache and install docker
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+
+    - name: "Add user {{ main_user }} to the docker group"
+      become: true
+      ansible.builtin.user:
+        name: "{{ main_user }}"
+        groups: docker
+        append: true
+
+    - name: Reset connection to apply docker group membership instantly
+      ansible.builtin.meta: reset_connection
+    
+    - name: Create the shared docker network
+      community.docker.docker_network:
+        name: "{{ shared_network_name  }}"
+        driver: bridge
+        state: present
+        ipam_config:
+          - subnet: "10.10.10.0/24"
+            gateway: "10.10.10.1"
+    
+    - name: Login to docker registry for authenticated pulls
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_pat_token }}"
+
+    - name: Print message
+      ansible.builtin.debug:
+        msg: Finished installing docker and setting it up
+

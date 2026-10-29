@@ -1,0 +1,5 @@
+main_user: "pi"
+shared_network_name: "shared_net"
+docker_username: "ananthvk0"
+# Make sure vault.yaml contains 
+# docker_pat_token
